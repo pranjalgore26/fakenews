@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fake news checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #162033;
+    --slate: #5b687a;
+    --paper: #e8ecf1;
+    --sheet: #fbfcfd;
+    --line: #cdd5df;
+    --real: #0f7b6c;
+    --fake: #b3265b;
+    --focus: #2f5fd0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.5 "Archivo", system-ui, sans-serif;
+  }
+  header { max-width: 1100px; margin: 0 auto; padding: 40px 24px 20px; }
+  h1 {
+    margin: 0; font-stretch: 75%; font-weight: 800;
+    font-size: clamp(2.2rem, 5vw, 3.6rem); line-height: 1; letter-spacing: -0.01em;
+  }
+  header p { margin: 12px 0 0; max-width: 56ch; color: var(--slate); }
+
+  main {
+    max-width: 1100px; margin: 0 auto; padding: 8px 24px 64px;
+    display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px;
+  }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+
+  .sheet {
+    background: var(--sheet); border: 1px solid var(--line); border-radius: 4px;
+    padding: 20px; display: flex; flex-direction: column;
+  }
+  textarea {
+    flex: 1; min-height: 340px; resize: vertical; width: 100%;
+    border: 0; outline: 0; background: transparent; color: var(--ink);
+    font: 400 1.05rem/1.65 "Source Serif 4", Georgia, serif;
+  }
+  textarea::placeholder { color: #8a95a5; }
+  .sheet:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 12px;
+  }
+  .count { margin-right: auto; color: var(--slate); font-size: .9rem; }
+  button {
+    font: 600 .95rem "Archivo", sans-serif; cursor: pointer;
+    border-radius: 3px; padding: 10px 16px;
+  }
+  button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+  .ghost:hover { border-color: var(--slate); }
+  .primary { background: var(--ink); border: 1px solid var(--ink); color: #fff; }
+  .primary:hover { background: #24324d; }
+  .primary:disabled { opacity: .55; cursor: progress; }
+
+  .result { padding: 4px 0 0; }
+  .result h2 { margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; color: var(--slate); }
+  .empty { color: var(--slate); max-width: 34ch; }
+
+  .verdict { margin: 0; font-stretch: 75%; font-weight: 800; font-size: 2.4rem; line-height: 1.05; }
+  .verdict.fake { color: var(--fake); }
+  .verdict.real { color: var(--real); }
+  .conf { margin: 6px 0 22px; color: var(--slate); }
+
+  .scale { position: relative; height: 10px; border-radius: 5px;
+    background: linear-gradient(90deg, var(--real), #c9ced6 50%, var(--fake)); }
+  .marker {
+    position: absolute; top: -7px; width: 4px; height: 24px; background: var(--ink);
+    border-radius: 2px; transform: translateX(-50%);
+    transition: left .7s cubic-bezier(.2,.8,.2,1);
+  }
+  .ends { display: flex; justify-content: space-between; margin-top: 10px; font-size: .85rem; color: var(--slate); }
+
+  .signals { margin-top: 28px; }
+  .signals h3 { margin: 0 0 8px; font-size: .95rem; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; padding: 0; list-style: none; }
+  .chips li {
+    padding: 3px 10px; border-radius: 3px; font-size: .9rem;
+    font-family: "Source Serif 4", Georgia, serif;
+  }
+  .chips.fake li { background: #f6dce6; color: #7d1a3e; }
+  .chips.real li { background: #d4ece8; color: #0a5448; }
+
+  .error { color: var(--fake); font-weight: 600; }
+  .caveat { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--slate); font-size: .88rem; }
+
+  @media (prefers-reduced-motion: reduce) { .marker { transition: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Fake news checker</h1>
+  <p>Paste a news article. A machine-learning model compares its writing style with thousands of real and fake articles and shows which way it leans.</p>
+</header>
+
+<main>
+  <section class="sheet" aria-label="Article text">
+    <label for="text" class="sr" style="position:absolute;left:-9999px">Article text</label>
+    <textarea id="text" placeholder="Paste the headline and body of an article here…"></textarea>
+    <div class="bar">
+      <span class="count" id="count">0 words</span>
+      <button class="ghost" data-sample="fake" type="button">Try a fake-style sample</button>
+      <button class="ghost" data-sample="real" type="button">Try a news-style sample</button>
+      <button class="primary" id="go" type="button">Check article</button>
+    </div>
+  </section>
+
+  <section class="result" aria-live="polite" id="result">
+    <h2>Result</h2>
+    <p class="empty">Paste at least {{ min_words }} words, then select Check article.</p>
+  </section>
+</main>
+
+<script>
+const MIN_WORDS = {{ min_words }};
+const SAMPLES = {
+  fake: "SHOCKING truth the mainstream media is hiding from you! Anonymous insiders EXPOSE the secret plot by corrupt elites to silence patriots, and big pharma is terrified of this miracle cure they tried to ban. Wake up and share this before it gets deleted, because they do not want you to know the truth about what is really happening!",
+  real: "The central bank held interest rates steady on Wednesday, citing moderate growth and easing inflation in the latest data. Officials said any future change would depend on the pace of hiring over the coming months, according to a statement released after the two-day meeting. Analysts had widely expected the decision."
+};
+
+const $ = (id) => document.getElementById(id);
+const text = $("text"), go = $("go"), result = $("result");
+const words = () => (text.value.trim().match(/\S+/g) || []).length;
+
+text.addEventListener("input", () => { $("count").textContent = words() + " words"; });
+
+document.querySelectorAll("[data-sample]").forEach((b) =>
+  b.addEventListener("click", () => {
+    text.value = SAMPLES[b.dataset.sample];
+    text.dispatchEvent(new Event("input"));
+  })
+);
+
+function el(tag, cls, txt) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (txt !== undefined) e.textContent = txt;
+  return e;
+}
+
+function chips(kind, items) {
+  const ul = el("ul", "chips " + kind);
+  items.forEach((w) => ul.appendChild(el("li", null, w)));
+  return ul;
+}
+
+function render(d) {
+  result.replaceChildren(el("h2", null, "Result"));
+  const pct = Math.round(d.fake_probability * 100);
+  const lean = d.verdict === "fake" ? "Leans fake" : "Leans real";
+  const conf = d.verdict === "fake" ? pct : 100 - pct;
+
+  result.appendChild(el("p", "verdict " + d.verdict, lean));
+  result.appendChild(el("p", "conf", conf + "% model confidence"));
+
+  const scale = el("div", "scale");
+  const marker = el("div", "marker");
+  marker.style.left = "50%";
+  scale.appendChild(marker);
+  result.appendChild(scale);
+  const ends = el("div", "ends");
+  ends.append(el("span", null, "Reads like real reporting"), el("span", null, "Reads like fake news"));
+  result.appendChild(ends);
+  requestAnimationFrame(() => requestAnimationFrame(() => { marker.style.left = pct + "%"; }));
+
+  const s = el("div", "signals");
+  if (d.signals.fake.length) { s.appendChild(el("h3", null, "Words pushing toward fake")); s.appendChild(chips("fake", d.signals.fake)); }
+  if (d.signals.real.length) { s.appendChild(el("h3", null, "Words pushing toward real")); s.appendChild(chips("real", d.signals.real)); }
+  result.appendChild(s);
+
+  result.appendChild(el("p", "caveat",
+    "This model scores writing style, not facts. A well-written false story can pass, and a blunt true one can be flagged. Use it as a prompt to check sources, not as proof."));
+}
+
+go.addEventListener("click", async () => {
+  if (words() < MIN_WORDS) {
+    result.replaceChildren(el("h2", null, "Result"), el("p", "error", "Paste at least " + MIN_WORDS + " words to get a reliable score."));
+    return;
+  }
+  go.disabled = true; go.textContent = "Checking…";
+  try {
+    const r = await fetch("/predict", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.value })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Something went wrong.");
+    render(d);
+  } catch (e) {
+    result.replaceChildren(el("h2", null, "Result"), el("p", "error", e.message));
+  } finally {
+    go.disabled = false; go.textContent = "Check article";
+  }
+});
+</script>
+</body>
+</html>
